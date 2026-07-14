@@ -1,0 +1,14 @@
+string target_frame
+int32 target_label
+float64 timeout_sec
+
+---
+bool success
+string message
+geometry_msgs/PoseStamped grasp_pose
+float64 score
+float64 width
+float64 height
+float64 depth
+int32 object_id
+string source_frame
