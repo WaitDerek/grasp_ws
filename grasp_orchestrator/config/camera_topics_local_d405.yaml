@@ -1,0 +1,7 @@
+/**:
+  ros__parameters:
+    color_topic: /camera/d405/color/image_rect_raw
+    depth_topic: /camera/d405/aligned_depth_to_color/image_raw
+    camera_info_topic: /camera/d405/aligned_depth_to_color/camera_info
+    source_frame_override: ""
+    default_source_frame: d405_color_optical_frame

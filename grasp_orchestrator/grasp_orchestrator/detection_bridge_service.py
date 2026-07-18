@@ -43,6 +43,9 @@ class DetectionBridgeService(Node):
         )
         self.declare_parameter("save_dir", default_save_dir)
         self.declare_parameter("source_frame_override", "")
+        self.declare_parameter(
+            "default_source_frame", "hdas/camera_wrist_right_color_optical_frame"
+        )
         self.declare_parameter("default_timeout_sec", 20.0)
         self.declare_parameter("input_ready_timeout_sec", 2.0)
         self.declare_parameter("poll_interval_sec", 0.1)
@@ -122,7 +125,11 @@ class DetectionBridgeService(Node):
         result_frame = str(result.get("source_frame", "")).strip().lstrip("/")
         if result_frame:
             return result_frame
-        return "hdas/camera_wrist_right_color_optical_frame"
+        return (
+            str(self.get_parameter("default_source_frame").value)
+            .strip()
+            .lstrip("/")
+        )
 
     def wait_for_input_publishers(self):
         timeout_sec = float(self.get_parameter("input_ready_timeout_sec").value)
