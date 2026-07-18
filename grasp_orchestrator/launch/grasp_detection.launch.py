@@ -9,7 +9,7 @@ from launch.substitutions import (
     PythonExpression,
 )
 from launch_ros.actions import Node
-from launch_ros.substitutions import FindPackagePrefix
+from launch_ros.substitutions import FindPackagePrefix, FindPackageShare
 
 
 def generate_launch_description() -> LaunchDescription:
@@ -18,14 +18,11 @@ def generate_launch_description() -> LaunchDescription:
     graspness_dir = LaunchConfiguration("graspness_dir")
     checkpoint_path = LaunchConfiguration("checkpoint_path")
     runtime_dir = LaunchConfiguration("runtime_dir")
-    color_topic = LaunchConfiguration("color_topic")
-    depth_topic = LaunchConfiguration("depth_topic")
-    camera_info_topic = LaunchConfiguration("camera_info_topic")
+    config_file = LaunchConfiguration("config_file")
     scene_topic = LaunchConfiguration("scene_topic")
     target_topic = LaunchConfiguration("target_topic")
     visualize = LaunchConfiguration("visualize")
     visualization_grasps = LaunchConfiguration("visualization_grasps")
-    source_frame_override = LaunchConfiguration("source_frame_override")
 
     return LaunchDescription(
         [
@@ -75,16 +72,15 @@ def generate_launch_description() -> LaunchDescription:
                 ),
             ),
             DeclareLaunchArgument(
-                "color_topic",
-                default_value="/hdas/camera_wrist_right/color/image_raw",
-            ),
-            DeclareLaunchArgument(
-                "depth_topic",
-                default_value="/hdas/camera_wrist_right/aligned_depth_to_color/image_raw",
-            ),
-            DeclareLaunchArgument(
-                "camera_info_topic",
-                default_value="/hdas/camera_wrist_right/aligned_depth_to_color/camera_info",
+                "config_file",
+                default_value=PathJoinSubstitution(
+                    [
+                        FindPackageShare("grasp_orchestrator"),
+                        "config",
+                        "camera_topics_r1pro.yaml",
+                    ]
+                ),
+                description="ROS parameter file containing the RGB-D camera topics.",
             ),
             DeclareLaunchArgument(
                 "scene_topic",
@@ -96,7 +92,6 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument("visualize", default_value="false"),
             DeclareLaunchArgument("visualization_grasps", default_value="10"),
-            DeclareLaunchArgument("source_frame_override", default_value=""),
             ExecuteProcess(
                 cmd=[
                     FindExecutable(name="python3"),
@@ -105,16 +100,13 @@ def generate_launch_description() -> LaunchDescription:
                     checkpoint_path,
                     "--save_dir",
                     runtime_dir,
-                    "--color_topic",
-                    color_topic,
-                    "--depth_topic",
-                    depth_topic,
-                    "--camera_info_topic",
-                    camera_info_topic,
                     "--visualize",
                     visualize,
                     "--visualization_grasps",
                     visualization_grasps,
+                    "--ros-args",
+                    "--params-file",
+                    config_file,
                 ],
                 condition=IfCondition(
                     PythonExpression(
@@ -162,15 +154,12 @@ def generate_launch_description() -> LaunchDescription:
                 output="screen",
                 prefix=[FindExecutable(name="python3")],
                 parameters=[
+                    config_file,
                     {
                         "save_dir": runtime_dir,
                         "input_mode": detector_mode,
-                        "color_topic": color_topic,
-                        "depth_topic": depth_topic,
-                        "camera_info_topic": camera_info_topic,
                         "scene_topic": scene_topic,
                         "target_topic": target_topic,
-                        "source_frame_override": source_frame_override,
                     }
                 ],
             ),

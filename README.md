@@ -87,6 +87,18 @@ source "$GRASP_WS/install/setup.zsh"
 ros2 launch grasp_orchestrator grasp_detection.launch.py
 ```
 
+The default camera configuration is the R1 Pro wrist camera. To test with the
+locally connected D405, select the installed local-camera YAML instead:
+
+```bash
+ros2 launch grasp_orchestrator grasp_detection.launch.py \
+  config_file:="$(ros2 pkg prefix grasp_orchestrator)/share/grasp_orchestrator/config/camera_topics_local_d405.yaml"
+```
+
+Camera topics are configured in `grasp_orchestrator/config/*.yaml`. Both the
+GraspNet daemon and the detection bridge read the same file, so change all three
+RGB-D inputs there rather than passing separate launch arguments.
+
 To use the target-object ATEC pipeline instead:
 
 ```bash

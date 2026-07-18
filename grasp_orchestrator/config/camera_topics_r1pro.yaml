@@ -1,0 +1,7 @@
+/**:
+  ros__parameters:
+    color_topic: /hdas/camera_wrist_right/color/image_raw
+    depth_topic: /hdas/camera_wrist_right/aligned_depth_to_color/image_raw
+    camera_info_topic: /hdas/camera_wrist_right/aligned_depth_to_color/camera_info
+    source_frame_override: ""
+    default_source_frame: hdas/camera_wrist_right_color_optical_frame
