@@ -1,7 +1,9 @@
 import json
 import os
 import tempfile
+import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Dict
 
@@ -89,6 +91,7 @@ class DetectionBridgeService(Node):
         self.config_path = self.save_dir / "detection_config.json"
 
         self.callback_group = ReentrantCallbackGroup()
+        self.detection_lock = threading.Lock()
         self.pose_pub = self.create_publisher(PoseStamped, result_topic, 10)
         self.service = self.create_service(
             DetectGraspPose,
@@ -150,6 +153,22 @@ class DetectionBridgeService(Node):
         ]
 
     def handle_detect(self, request: DetectGraspPose.Request, response: DetectGraspPose.Response):
+        # The daemon uses one trigger/result pair. Serialize callers so one
+        # request cannot replace another request's trigger while inference runs.
+        with self.detection_lock:
+            return self._handle_detect_locked(request, response)
+
+    def _trigger_matches(self, request_id: str) -> bool:
+        try:
+            return self.trigger_path.read_text(encoding="utf-8").strip() == request_id
+        except FileNotFoundError:
+            return False
+
+    def _handle_detect_locked(
+        self,
+        request: DetectGraspPose.Request,
+        response: DetectGraspPose.Response,
+    ):
         self.get_logger().info(
             f"received detection request target_frame='{request.target_frame}'"
         )
@@ -173,36 +192,44 @@ class DetectionBridgeService(Node):
             self.result_path.unlink(missing_ok=True)
         self.trigger_path.unlink(missing_ok=True)
 
+        request_id = uuid.uuid4().hex
         config = self.build_config()
         self.config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
-        self.trigger_path.write_text("trigger\n", encoding="utf-8")
-        self.get_logger().info("detection trigger published")
+        self.trigger_path.write_text(f"{request_id}\n", encoding="utf-8")
+        self.get_logger().info(
+            f"detection trigger published request_id={request_id}"
+        )
 
         deadline = time.monotonic() + timeout_sec
+        result = None
         while time.monotonic() < deadline and rclpy.ok():
             if self.result_path.exists() and not self.trigger_path.exists():
-                break
+                try:
+                    candidate_result = json.loads(
+                        self.result_path.read_text(encoding="utf-8")
+                    )
+                except json.JSONDecodeError:
+                    time.sleep(poll_interval)
+                    continue
+                if candidate_result.get("request_id") == request_id:
+                    result = candidate_result
+                    break
             time.sleep(poll_interval)
 
-        if not self.result_path.exists():
-            self.trigger_path.unlink(missing_ok=True)
+        if result is None:
+            if self._trigger_matches(request_id):
+                self.trigger_path.unlink(missing_ok=True)
             response.success = False
             response.message = (
-                f"timeout waiting for grasp result in {timeout_sec:.1f}s, "
-                f"check the {self.input_mode} detector input topics"
+                f"timeout waiting for matching grasp result in "
+                f"{timeout_sec:.1f}s (request_id={request_id}); check the "
+                f"{self.input_mode} detector input topics or increase the "
+                "detection timeout"
             )
             self.get_logger().error(response.message)
             return response
 
         self.get_logger().info("detection result file received")
-
-        try:
-            result = json.loads(self.result_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
-            response.success = False
-            response.message = f"invalid grasp result json: {exc}"
-            self.get_logger().error(response.message)
-            return response
 
         if not bool(result.get("success", False)):
             response.success = False
@@ -231,8 +258,23 @@ class DetectionBridgeService(Node):
         response.depth = float(result.get("depth", 0.0))
         response.object_id = int(result.get("object_id", 0))
         response.source_frame = source_frame
+        raw_candidates = result.get("candidates", [])
+        if not isinstance(raw_candidates, list) or not raw_candidates:
+            raw_candidates = [result]
+        for candidate in raw_candidates:
+            if not isinstance(candidate, dict):
+                continue
+            response.candidate_poses.append(
+                pose_from_json(source_frame, self.get_clock().now().to_msg(), candidate)
+            )
+            response.candidate_scores.append(float(candidate.get("score", 0.0)))
+            response.candidate_widths.append(float(candidate.get("width", 0.0)))
+            response.candidate_heights.append(float(candidate.get("height", 0.0)))
+            response.candidate_depths.append(float(candidate.get("depth", 0.0)))
+            response.candidate_object_ids.append(int(candidate.get("object_id", 0)))
         self.get_logger().info(
-            f"returning camera-frame grasp pose frame='{source_frame}'"
+            f"returning {len(response.candidate_poses)} camera-frame grasp "
+            f"candidate(s), frame='{source_frame}'"
         )
         return response
 

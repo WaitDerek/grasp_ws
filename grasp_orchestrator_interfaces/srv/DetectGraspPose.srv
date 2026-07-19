@@ -12,3 +12,11 @@ float64 height
 float64 depth
 int32 object_id
 string source_frame
+# Candidates are sorted by descending detector score.  The scalar fields above
+# remain the best candidate for backward compatibility.
+geometry_msgs/PoseStamped[] candidate_poses
+float64[] candidate_scores
+float64[] candidate_widths
+float64[] candidate_heights
+float64[] candidate_depths
+int32[] candidate_object_ids
